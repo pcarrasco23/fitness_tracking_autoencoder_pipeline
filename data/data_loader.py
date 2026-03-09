@@ -11,6 +11,8 @@ def load_timeseries_data(filepath, health_decay_rate=0.01):
 
     df = pd.read_csv(filepath)
 
+    df.head(2).to_csv("sample_input_data.csv", index=False)
+
     # Convert date to datetime
     df["date"] = pd.to_datetime(df["date"])
 

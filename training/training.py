@@ -11,7 +11,7 @@ def train_autoencoder(model, train_loader, num_epochs=50, learning_rate=0.001):
 
     for epoch in range(num_epochs):
         epoch_loss = 0
-        for batch in train_loader:
+        for (batch,) in train_loader:
             # Forward pass
             outputs = model(batch)
             loss = criterion(outputs, batch)
@@ -40,8 +40,8 @@ def train_lstm_autoencoder(model, train_loader, num_epochs=50, learning_rate=0.0
 
     for epoch in range(num_epochs):
         epoch_loss = 0
-        for batch in train_loader:
-            # batch: (batch_size, seq_len, input_dim) — already 3D from LSTMWindowDataset
+        for (batch,) in train_loader:
+            # batch: (batch_size, seq_len, input_dim)
             outputs = model(batch)
 
             # Both outputs and batch are (batch_size, seq_len, input_dim)

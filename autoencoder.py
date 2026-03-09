@@ -7,10 +7,9 @@ import pandas as pd
 import torch
 import matplotlib.pyplot as plt
 import kagglehub
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 # Local modules
-from training.dataset import TrackingDataset, LSTMWindowDataset
 from training.models import Autoencoder, LSTMAutoencoder
 from data.data_loader import load_timeseries_data, build_lstm_windows
 from training.training import train_autoencoder, train_lstm_autoencoder
@@ -20,7 +19,10 @@ from evaluation.feature_analysis import (
     analyze_features,
     analyze_features_lstm,
 )
-from evaluation.user_timeseries import analyze_user_timeseries, analyze_user_timeseries_lstm
+from evaluation.user_timeseries import (
+    analyze_user_timeseries,
+    analyze_user_timeseries_lstm,
+)
 from visualization.plotting import (
     plot_user_timeseries_errors,
     plot_training_vs_validation_timeseries,
@@ -64,15 +66,6 @@ file_path = waqasishtiaq_fitness_path + "/health_fitness_tracking_365days.csv"
 print("Loading time series data...")
 X, y, scaler, df, feature_names, user_health_df = load_timeseries_data(file_path)
 
-max_date = df["date"].max()
-
-print(f"\nDataset Info:")
-print(f"Total records: {len(df)}")
-print(f"Total users: {df['user_id'].nunique()}")
-print(f"Date range: {df['date'].min()} to {df['date'].max()}")
-print(f"\nUser Health Distribution:")
-print(user_health_df["is_training"].value_counts())
-
 # Split records into training and validation subsets
 training_data = X[y == 1]
 validation_data = X[y == 0]
@@ -81,9 +74,8 @@ print(f"\nTraining records: {len(training_data)}")
 print(f"Validation records: {len(validation_data)}")
 
 # Build a DataLoader using only healthy records — the autoencoder learns normal patterns
-training_dataset = TrackingDataset(training_data)
+training_dataset = TensorDataset(torch.FloatTensor(training_data))
 training_loader = DataLoader(training_dataset, batch_size=BATCH_SIZE, shuffle=True)
-
 
 # =============================================================================
 # Standard Autoencoder — training and error analysis
@@ -120,12 +112,7 @@ feature_contribution, training_errors, validation_errors = analyze_features(
     model, training_data, validation_data, feature_names
 )
 
-print("\n" + "=" * 80)
-print("FEATURE CONTRIBUTIONS TO VALIDATION DETECTION")
-print("=" * 80)
-print(feature_contribution.to_string(index=False))
-
-# Summarise per-user reconstruction error statistics
+# Summarize per-user reconstruction error statistics
 print("\nAnalyzing per-user time series...")
 user_analysis = analyze_user_timeseries(
     model, df, X, feature_names, scaler, user_health_df
@@ -134,41 +121,15 @@ user_analysis_sorted = user_analysis.sort_values(
     "avg_reconstruction_error", ascending=False
 )
 
-print("\n" + "=" * 80)
-print("TOP 10 USERS WITH HIGHEST AVERAGE RECONSTRUCTION ERROR")
-print("=" * 80)
-print(user_analysis_sorted.head(10).to_string(index=False))
-
-# Save user time series analysis to CSV
 user_analysis_sorted.to_csv("user_timeseries_analysis.csv", index=False)
-print("\nSaved user time series analysis to user_timeseries_analysis.csv")
+print(f"Saved {len(user_analysis_sorted)} users to user_timeseries_analysis.csv")
 
-print("\n" + "=" * 80)
-print("VALIDATION USERS ANALYSIS")
-print("=" * 80)
 validation_users = user_analysis[user_analysis["is_training"] == 0].sort_values(
     "avg_reconstruction_error", ascending=False
 )
-
-# Save validation users analysis to CSV
 validation_users.to_csv("validation_users_analysis.csv", index=False)
-print("Saved validation users analysis to validation_users_analysis.csv")
-
 print(
-    validation_users[
-        [
-            "user_id",
-            "first_date",
-            "last_date",
-            "health_score",
-            "avg_reconstruction_error",
-            "max_reconstruction_error",
-            "std_reconstruction_error",
-            "top_problem_feature_1",
-            "top_problem_error_1",
-            "num_days",
-        ]
-    ].to_string(index=False)
+    f"Saved {len(validation_users)} validation users to validation_users_analysis.csv"
 )
 
 
@@ -196,17 +157,9 @@ plot_training_vs_validation_timeseries(df)
 # Detailed validation user report
 # =============================================================================
 
-print("\nGenerating detailed validation user analysis...")
 detailed_validation = generate_detailed_validation_analysis(df, feature_names)
-
-print("\n" + "=" * 80)
-print("DETAILED VALIDATION USERS ANALYSIS - ALL RECORDS WITH DATES")
-print("=" * 80)
-print(f"Total validation records: {len(detailed_validation)}")
 detailed_validation.to_csv("validation_detailed_analysis.csv", index=False)
-print("Saved detailed validation analysis to validation_detailed_analysis.csv")
-print("\nShowing first 50 records:")
-print(detailed_validation.head(50).to_string(index=False))
+print(f"Saved {len(detailed_validation)} records to validation_detailed_analysis.csv")
 
 
 training_avg_error = df[df["is_training"] == 1]["total_error"].mean()
@@ -231,7 +184,9 @@ print("\nAnalysis complete!")
 LSTM_SEQ_LEN = 7
 
 print(f"\nBuilding {LSTM_SEQ_LEN}-day sliding windows for LSTM...")
-X_windows, y_windows, user_ids_windows, window_end_dates = build_lstm_windows(df, X, seq_len=LSTM_SEQ_LEN)
+X_windows, y_windows, user_ids_windows, window_end_dates = build_lstm_windows(
+    df, X, seq_len=LSTM_SEQ_LEN
+)
 
 lstm_training_data = X_windows[y_windows == 1]
 lstm_validation_data = X_windows[y_windows == 0]
@@ -240,7 +195,7 @@ print(f"Total windows: {len(X_windows)}")
 print(f"Training windows: {len(lstm_training_data)}")
 print(f"Validation windows: {len(lstm_validation_data)}")
 
-lstm_training_dataset = LSTMWindowDataset(lstm_training_data)
+lstm_training_dataset = TensorDataset(torch.FloatTensor(lstm_training_data))
 lstm_training_loader = DataLoader(
     lstm_training_dataset, batch_size=BATCH_SIZE, shuffle=True
 )
@@ -259,7 +214,9 @@ lstm_model = LSTMAutoencoder(
 )
 
 if os.path.exists(LSTM_PTH):
-    print(f"\nFound existing model '{LSTM_PTH}' — skipping training, loading weights...")
+    print(
+        f"\nFound existing model '{LSTM_PTH}' — skipping training, loading weights..."
+    )
     lstm_model.load_state_dict(torch.load(LSTM_PTH, weights_only=True))
     lstm_model.eval()
     lstm_losses = []
@@ -286,11 +243,6 @@ lstm_feature_contribution, lstm_training_errors, lstm_validation_errors = (
     )
 )
 
-print("\n" + "=" * 80)
-print("LSTM FEATURE CONTRIBUTIONS TO VALIDATION DETECTION")
-print("=" * 80)
-print(lstm_feature_contribution.to_string(index=False))
-
 # Per-user LSTM reconstruction error analysis
 print("\nAnalyzing per-user LSTM time series...")
 lstm_user_analysis = analyze_user_timeseries_lstm(
@@ -300,13 +252,10 @@ lstm_user_analysis_sorted = lstm_user_analysis.sort_values(
     "avg_reconstruction_error", ascending=False
 )
 
-print("\n" + "=" * 80)
-print("LSTM — TOP 10 USERS WITH HIGHEST AVERAGE RECONSTRUCTION ERROR")
-print("=" * 80)
-print(lstm_user_analysis_sorted.head(10).to_string(index=False))
-
 lstm_user_analysis_sorted.to_csv("lstm_user_timeseries_analysis.csv", index=False)
-print("\nSaved LSTM user analysis to lstm_user_timeseries_analysis.csv")
+print(
+    f"Saved {len(lstm_user_analysis_sorted)} users to lstm_user_timeseries_analysis.csv"
+)
 
 lstm_validation_users = lstm_user_analysis[
     lstm_user_analysis["is_training"] == 0
@@ -321,10 +270,9 @@ lstm_detailed_validation = generate_detailed_validation_analysis_lstm(
     lstm_model, X_windows, y_windows, user_ids_windows, window_end_dates, feature_names
 )
 lstm_detailed_validation.to_csv("lstm_validation_detailed_analysis.csv", index=False)
-print(f"Total validation windows: {len(lstm_detailed_validation)}")
-print("Saved detailed LSTM validation analysis to lstm_validation_detailed_analysis.csv")
-print("\nShowing first 50 records:")
-print(lstm_detailed_validation.head(50).to_string(index=False))
+print(
+    f"Saved {len(lstm_detailed_validation)} windows to lstm_validation_detailed_analysis.csv"
+)
 
 lstm_training_avg_error = lstm_all_errors[y_windows == 1]["total_error"].mean()
 lstm_validation_avg_error = lstm_all_errors[y_windows == 0]["total_error"].mean()
@@ -348,12 +296,14 @@ print("\nGenerating visualizations...")
 visualize_feature_contributions(lstm_feature_contribution)
 
 # Build a window-level DataFrame for LSTM plots (one row per sliding window)
-lstm_plot_df = pd.DataFrame({
-    "user_id": user_ids_windows,
-    "date": window_end_dates,
-    "is_training": y_windows,
-    "total_error": lstm_all_errors["total_error"].values,
-})
+lstm_plot_df = pd.DataFrame(
+    {
+        "user_id": user_ids_windows,
+        "date": window_end_dates,
+        "is_training": y_windows,
+        "total_error": lstm_all_errors["total_error"].values,
+    }
+)
 
 # Sample two training and two validation users for time-series plots
 sample_training_users = (
