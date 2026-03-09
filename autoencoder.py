@@ -40,7 +40,7 @@ from evaluation.model_comparison import compare_models
 # =============================================================================
 
 BATCH_SIZE = 32
-ENCODING_DIM = 16
+ENCODING_DIM = 4
 LEARNING_RATE = 0.001
 EPOCHS = 100
 
@@ -50,8 +50,8 @@ LSTM_NUM_LAYERS = 1
 LSTM_LEARNING_RATE = 0.0005
 LSTM_EPOCHS = 100
 
-AE_PTH = "healthy_autoencoder.pth"
-LSTM_PTH = "lstm_healthy_autoencoder.pth"
+AE_PTH = "standard_autoencoder_model.pth"
+LSTM_PTH = "lstm_autoencoder_model.pth"
 SCALER_PKL = "scaler.pkl"
 
 
